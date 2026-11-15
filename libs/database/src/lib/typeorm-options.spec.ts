@@ -10,6 +10,7 @@ const env: DatabaseEnv = {
   DB_PASSWORD: 'secret',
   DB_NAME: 'ims_product',
   DB_SSL: false,
+  DB_MIGRATIONS_RUN: true,
 };
 
 describe('buildTypeOrmOptions', () => {
@@ -25,19 +26,19 @@ describe('buildTypeOrmOptions', () => {
       database: 'ims_product',
       ssl: false,
       synchronize: false,
-      migrationsRun: false,
+      migrationsRun: true,
     });
     expect(options.namingStrategy).toBeInstanceOf(SnakeNamingStrategy);
   });
 
   it('enables verified TLS when DB_SSL is set', () => {
     const options = buildTypeOrmOptions(
-      { ...env, DB_SSL: true },
-      { entities: [], migrations: [], migrationsRun: true },
+      { ...env, DB_SSL: true, DB_MIGRATIONS_RUN: false },
+      { entities: [], migrations: [] },
     );
 
     expect(options.ssl).toEqual({ rejectUnauthorized: true });
-    expect(options.migrationsRun).toBe(true);
+    expect(options.migrationsRun).toBe(false);
   });
 });
 

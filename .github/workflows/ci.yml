@@ -23,6 +23,33 @@ jobs:
     name: Lint, type-check, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Real Postgres and Redis for the integration tests. Each test suite
+    # creates its own *_test database, so no init script is needed here.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ims
+          POSTGRES_PASSWORD: ims_ci_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ims"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: ims
+      DB_PASSWORD: ims_ci_password
+      REDIS_URL: redis://localhost:6379
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,3 +82,6 @@ jobs:
 
       - name: Lint, type-check, test and build affected projects
         run: pnpm exec nx affected -t lint typecheck test build --parallel=3
+
+      - name: Integration tests for affected projects
+        run: pnpm exec nx affected -t test-int --parallel=1

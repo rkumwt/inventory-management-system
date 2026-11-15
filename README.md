@@ -3,9 +3,9 @@
 An MVP of an enterprise-style inventory system, built as an Nx monorepo of
 NestJS microservices with a Next.js frontend.
 
-> **Build status:** Phase 1 of 7 is complete (workspace, tooling, shared libs,
-> local infrastructure). Services and the frontend arrive in later phases; see
-> [Roadmap](#roadmap).
+> **Build status:** Phase 2 of 7 is complete: `auth-service` and `api-gateway`
+> run and login works end to end. The remaining services and the frontend
+> arrive in later phases; see [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -81,6 +81,7 @@ Key rules:
 | --------- | ------------------------------------------------------------ |
 | Monorepo  | Nx 22, pnpm 9, TypeScript 5.9 (strict)                       |
 | Backend   | NestJS 11, TypeORM 0.3 (migrations only), PostgreSQL 16      |
+| Build     | Vite 7 with SWC (one Node bundle per service)                |
 | Messaging | RabbitMQ 3.13 (Amazon MQ in production)                      |
 | Cache     | Redis 7                                                      |
 | Frontend  | Next.js App Router, Tailwind, shadcn/ui, TanStack Query, Zod |
@@ -89,7 +90,10 @@ Key rules:
 ## Repository layout
 
 ```
-apps/                     one folder per deployable (added from Phase 2)
+apps/
+  api-gateway/            entry point: JWT check, rate limit, routing
+  auth-service/           users, login, refresh, logout
+  ...                     remaining services and web arrive in later phases
 libs/
   config/                 Zod env schemas + fail-fast validator
   common/                 guards, decorators, error filter, pagination, logger
@@ -97,6 +101,8 @@ libs/
   database/               TypeORM options factory, base entity, naming strategy
 docker/postgres/          init script: one database per service
 docker-compose.yml        Postgres, Redis, RabbitMQ
+tools/scaffold-app.sh     writes the Nx/Jest/Vite boilerplate for a new app
+tools/vite/nest-app.ts    shared Vite + SWC config for every NestJS app
 ```
 
 Shared libs contain **no business logic**. Dependencies are enforced by the
@@ -118,8 +124,24 @@ Prerequisites: Node.js >= 22.12, pnpm 9 (`npm i -g pnpm@9`), Docker.
 pnpm install        # install dependencies and git hooks
 pnpm setup:env      # copy every .env.example to .env (skips existing files)
 pnpm docker:up      # start Postgres, Redis, RabbitMQ and wait until healthy
-pnpm dev            # start every service and the frontend (from Phase 2)
+pnpm dev            # start every service in watch mode
 ```
+
+Then sign in through the gateway (seed users and their password are listed in
+[apps/auth-service/README.md](apps/auth-service/README.md#seed-users)):
+
+```bash
+curl -s -X POST http://localhost:4000/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@ims.local","password":"<SEED_USER_PASSWORD>"}'
+```
+
+Services:
+
+| App                                         | Port | API docs                     | Health    |
+| ------------------------------------------- | ---- | ---------------------------- | --------- |
+| [api-gateway](apps/api-gateway/README.md)   | 4000 | <http://localhost:4000/docs> | `/health` |
+| [auth-service](apps/auth-service/README.md) | 4001 | <http://localhost:4001/docs> | `/health` |
 
 Local infrastructure:
 
@@ -135,18 +157,19 @@ Databases created on first start: `ims_auth`, `ims_product`, `ims_warehouse`,
 
 ## Scripts
 
-| Command             | What it does                                          |
-| ------------------- | ----------------------------------------------------- |
-| `pnpm dev`          | Run all apps in watch mode                            |
-| `pnpm lint`         | ESLint for every project, including module boundaries |
-| `pnpm typecheck`    | `tsc --noEmit` for every project                      |
-| `pnpm test`         | Jest for every project                                |
-| `pnpm build`        | Build every app                                       |
-| `pnpm verify`       | lint + typecheck + test + build                       |
-| `pnpm format`       | Prettier write (`format:check` to verify only)        |
-| `pnpm docker:up`    | Start local infrastructure                            |
-| `pnpm docker:down`  | Stop it (data is kept)                                |
-| `pnpm docker:reset` | Stop it and delete all data volumes                   |
+| Command             | What it does                                            |
+| ------------------- | ------------------------------------------------------- |
+| `pnpm dev`          | Run all apps in watch mode                              |
+| `pnpm lint`         | ESLint for every project, including module boundaries   |
+| `pnpm typecheck`    | `tsc --noEmit` for every project                        |
+| `pnpm test`         | Unit tests for every project (no infrastructure needed) |
+| `pnpm test:int`     | Integration tests (needs `pnpm docker:up`)              |
+| `pnpm build`        | Build every app                                         |
+| `pnpm verify`       | lint + typecheck + test + build                         |
+| `pnpm format`       | Prettier write (`format:check` to verify only)          |
+| `pnpm docker:up`    | Start local infrastructure                              |
+| `pnpm docker:down`  | Stop it (data is kept)                                  |
+| `pnpm docker:reset` | Stop it and delete all data volumes                     |
 
 Run one project: `pnpm nx test common`. Run only what a change affects:
 `pnpm nx affected -t lint typecheck test build`.
@@ -189,23 +212,50 @@ Choices made where the brief was open, favouring the simpler option:
 4. **Libs are not built separately.** Apps import them through TypeScript path
    aliases (`@ims/*`) and bundle them at build time. Libs still have their own
    `lint`, `typecheck` and `test` targets.
-5. **One Postgres server locally, one database per service.** The isolation
+5. **Services are built with Vite, compiled by SWC.** Vite's default
+   compiler (esbuild) cannot emit the decorator metadata NestJS dependency
+   injection needs, so the SWC plugin does the TypeScript transform. The
+   shared config is `tools/vite/nest-app.ts`. Two consequences: the build
+   does not type-check (the `typecheck` target runs `tsc` for that), and an
+   interface used as the type of a decorated parameter must be imported with
+   `import type`. In development, `vite build --watch` rebuilds the bundle
+   and `node --watch` restarts the service.
+6. **One Postgres server locally, one database per service.** The isolation
    that matters (no shared schema, no cross-service queries) is kept, without
    running six containers. Production can use separate instances by changing
    `DB_HOST` per service.
-6. **Role-to-permission mapping is static code** in `libs/common`, and the
+7. **Role-to-permission mapping is static code** in `libs/common`, and the
    permissions are embedded in the access token. No permission tables or
    admin UI for the MVP.
-7. **Docker Compose runs infrastructure only.** Services run on the host with
+8. **Docker Compose runs infrastructure only.** Services run on the host with
    `pnpm dev` for fast reloads; per-app Dockerfiles come in Phase 7.
+9. **Synchronous calls use HTTP, not Nest TCP.** Every service needs an HTTP
+   server anyway (Swagger, health checks), so the gateway forwards plain HTTP
+   with a timeout and retries for idempotent requests. One protocol to debug,
+   and services stay callable with curl.
+10. **The gateway is a generic reverse proxy** driven by a routing table,
+    rather than one hand-written controller per downstream endpoint. Request
+    and response contracts are documented once, in each service's own Swagger.
+11. **Every service verifies the JWT itself** instead of trusting identity
+    headers set by the gateway. Verification is a local signature check, so
+    it costs no network call, and a service is safe even if reached directly.
+12. **Migrations run at service startup** (`DB_MIGRATIONS_RUN=true`) and are
+    hand-written SQL. This keeps `pnpm dev` to one command. In production,
+    set it to `false` and run migrations as a separate deploy step.
+13. **Seed data is created at startup** when `SEED_DATA=true`, by an
+    idempotent seeder inside each service, rather than by a separate script.
+14. **Refresh tokens are JWTs with a server-side record** (hash only), which
+    gives rotation, logout and reuse detection without a session store.
+15. **Unit and integration tests are separate targets** (`test`, `test-int`),
+    so unit tests never need Docker. CI runs both.
 
 ## Roadmap
 
 | Phase | Scope                                                           | Status  |
 | ----- | --------------------------------------------------------------- | ------- |
 | 1     | Workspace, tooling, shared libs, Docker Compose, root README    | Done    |
-| 2     | auth-service + api-gateway, login working end to end            | Next    |
-| 3     | product-service, warehouse-service                              | Pending |
+| 2     | auth-service + api-gateway, login working end to end            | Done    |
+| 3     | product-service, warehouse-service                              | Next    |
 | 4     | inventory-service: stock rules, movement history                | Pending |
 | 5     | order-service (Saga, Outbox, idempotency), notification-service | Pending |
 | 6     | Next.js frontend, all MVP screens                               | Pending |

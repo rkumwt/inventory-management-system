@@ -31,14 +31,3 @@ export function validateEnv<TSchema extends z.ZodType>(
   }
   return result.data;
 }
-
-/**
- * Adapter for `ConfigModule.forRoot({ validate })` from @nestjs/config:
- *
- *   ConfigModule.forRoot({ validate: createEnvValidator(authEnvSchema) })
- */
-export function createEnvValidator<TSchema extends z.ZodType>(
-  schema: TSchema,
-): (env: Record<string, unknown>) => z.infer<TSchema> {
-  return (env) => validateEnv(schema, env);
-}

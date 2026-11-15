@@ -1,0 +1,40 @@
+{
+  "name": "api-gateway",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-gateway/src",
+  "projectType": "application",
+  "tags": ["type:app"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/api-gateway"],
+      "options": {
+        "command": "vite build --config apps/api-gateway/vite.config.mts"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "dependsOn": ["build"],
+      "options": {
+        "commands": [
+          "vite build --config apps/api-gateway/vite.config.mts --mode development --watch",
+          "node --watch --enable-source-maps dist/apps/api-gateway/main.js"
+        ],
+        "parallel": true
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/api-gateway/tsconfig.json"
+      }
+    },
+    "test-int": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest -c apps/api-gateway/jest.int.config.js --runInBand --passWithNoTests"
+      }
+    }
+  }
+}
