@@ -25,15 +25,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history, needed to compute what is affected
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
+        uses: pnpm/action-setup@v6 # version comes from "packageManager" in package.json
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -44,7 +44,7 @@ jobs:
       # Sets NX_BASE / NX_HEAD: the PR's base branch for pull requests, or the
       # last successful CI run on main for pushes.
       - name: Derive SHAs for nx affected
-        uses: nrwl/nx-set-shas@v4
+        uses: nrwl/nx-set-shas@v5
 
       - name: Check commit messages
         if: github.event_name == 'pull_request'
