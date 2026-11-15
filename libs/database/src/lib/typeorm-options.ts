@@ -7,11 +7,6 @@ type Postgres = Extract<DataSourceOptions, { type: 'postgres' }>;
 export interface ServiceDatabaseOptions {
   entities: NonNullable<Postgres['entities']>;
   migrations: NonNullable<Postgres['migrations']>;
-  /**
-   * Apply pending migrations on startup. Convenient locally and fine for an
-   * MVP; in production run migrations as a separate deploy step instead.
-   */
-  migrationsRun?: boolean;
   logging?: boolean;
 }
 
@@ -36,7 +31,7 @@ export function buildTypeOrmOptions(
     ssl: env.DB_SSL ? { rejectUnauthorized: true } : false,
     entities: options.entities,
     migrations: options.migrations,
-    migrationsRun: options.migrationsRun ?? false,
+    migrationsRun: env.DB_MIGRATIONS_RUN,
     migrationsTableName: 'migrations',
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,

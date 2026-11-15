@@ -1,4 +1,5 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Type, ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
@@ -13,6 +14,8 @@ export interface HttpAppOptions {
   corsOrigins?: string[];
   /** Path the Swagger UI is served on. Defaults to `docs`. */
   swaggerPath?: string;
+  /** Prefix for every route (e.g. `v1`), except the paths in `exclude`. */
+  globalPrefix?: { prefix: string; exclude?: string[] };
 }
 
 /**
@@ -29,6 +32,12 @@ export function configureHttpApp(
   options: HttpAppOptions,
 ): void {
   app.useLogger(app.get(Logger));
+
+  if (options.globalPrefix) {
+    app.setGlobalPrefix(options.globalPrefix.prefix, {
+      exclude: options.globalPrefix.exclude ?? [],
+    });
+  }
 
   // Must be first so every later middleware and log line sees the ID.
   app.use(correlationIdMiddleware);
@@ -61,4 +70,21 @@ export function configureHttpApp(
       .build(),
   );
   SwaggerModule.setup(options.swaggerPath ?? 'docs', app, document);
+}
+
+/** Creates, configures and starts an HTTP service. Used by every `main.ts`. */
+export async function bootstrapHttpService(
+  rootModule: Type<unknown>,
+  options: HttpAppOptions & { port: number },
+): Promise<INestApplication> {
+  const app = await NestFactory.create(rootModule, { bufferLogs: true });
+  configureHttpApp(app, options);
+  await app.listen(options.port);
+  app
+    .get(Logger)
+    .log(
+      `${options.serviceName} listening on port ${options.port} (docs: /${options.swaggerPath ?? 'docs'})`,
+      'Bootstrap',
+    );
+  return app;
 }

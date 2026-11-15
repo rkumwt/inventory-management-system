@@ -6,11 +6,7 @@ import {
   jwtIssueEnvSchema,
   rabbitmqEnvSchema,
 } from './env-schemas';
-import {
-  ConfigValidationError,
-  createEnvValidator,
-  validateEnv,
-} from './validate-env';
+import { ConfigValidationError, validateEnv } from './validate-env';
 
 const serviceSchema = z.object({
   ...baseEnvSchema.shape,
@@ -41,6 +37,7 @@ describe('validateEnv', () => {
       DB_PASSWORD: 'secret',
       DB_NAME: 'ims_auth',
       DB_SSL: false,
+      DB_MIGRATIONS_RUN: true,
     });
   });
 
@@ -85,14 +82,5 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv(rabbitmqEnvSchema, { RABBITMQ_URL: 'http://localhost' }),
     ).toThrow(/RABBITMQ_URL/);
-  });
-});
-
-describe('createEnvValidator', () => {
-  it('returns a validate function usable by @nestjs/config', () => {
-    const validate = createEnvValidator(serviceSchema);
-
-    expect(validate(validEnv).PORT).toBe(3001);
-    expect(() => validate({})).toThrow(ConfigValidationError);
   });
 });

@@ -1,5 +1,7 @@
+export * from './lib/auth/auth-guard.module';
 export * from './lib/auth/auth-user';
 export * from './lib/auth/decorators';
+export * from './lib/auth/jwt-auth.guard';
 export * from './lib/auth/permissions.guard';
 export * from './lib/auth/roles';
 export * from './lib/bootstrap/configure-http-app';

@@ -12,12 +12,14 @@ import { z } from 'zod';
  *   export type AuthEnv = z.infer<typeof authEnvSchema>;
  */
 
-const port = z.coerce.number().int().min(1).max(65535);
+export const port = z.coerce.number().int().min(1).max(65535);
 
-const booleanFlag = z
-  .enum(['true', 'false'])
-  .default('false')
-  .transform((value) => value === 'true');
+/** `"true"` / `"false"` env flag, parsed to a boolean. */
+export const booleanFlag = (defaultValue: boolean) =>
+  z
+    .enum(['true', 'false'])
+    .default(defaultValue ? 'true' : 'false')
+    .transform((value) => value === 'true');
 
 const commaSeparatedList = z.string().transform((value) =>
   value
@@ -31,9 +33,15 @@ export const baseEnvSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
   LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
 });
+
+/** Base URL of another service, e.g. `http://localhost:4001`. */
+export const serviceUrl = z
+  .string()
+  .regex(/^https?:\/\/.+/, 'must be an http:// or https:// URL')
+  .transform((value) => value.replace(/\/+$/, ''));
 
 export const httpEnvSchema = z.object({
   PORT: port,
@@ -46,7 +54,9 @@ export const databaseEnvSchema = z.object({
   DB_USER: z.string().min(1),
   DB_PASSWORD: z.string().min(1),
   DB_NAME: z.string().min(1),
-  DB_SSL: booleanFlag,
+  DB_SSL: booleanFlag(false),
+  /** Apply pending migrations at startup (see Decisions in the README). */
+  DB_MIGRATIONS_RUN: booleanFlag(true),
 });
 
 export const rabbitmqEnvSchema = z.object({
