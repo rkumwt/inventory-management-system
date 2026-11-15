@@ -1,0 +1,57 @@
+name: CI
+
+# Quality gate for every pull request, and for main after a merge.
+# Only projects affected by the change are linted, type-checked, tested and
+# built (nx affected), so the pipeline stays fast as the monorepo grows.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same PR cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read # lets nx-set-shas find the last successful run on main
+
+jobs:
+  verify:
+    name: Lint, type-check, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history, needed to compute what is affected
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6 # version comes from "packageManager" in package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Sets NX_BASE / NX_HEAD: the PR's base branch for pull requests, or the
+      # last successful CI run on main for pushes.
+      - name: Derive SHAs for nx affected
+        uses: nrwl/nx-set-shas@v5
+
+      - name: Check commit messages
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from "$NX_BASE" --to "$NX_HEAD" --verbose
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint, type-check, test and build affected projects
+        run: pnpm exec nx affected -t lint typecheck test build --parallel=3
