@@ -1,0 +1,3 @@
+# Single-version policy: every app and lib shares the root package.json.
+# Nx projects are discovered through project.json files, not workspace packages.
+packages: []

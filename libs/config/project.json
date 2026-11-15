@@ -1,0 +1,15 @@
+{
+  "name": "config",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/config/src",
+  "projectType": "library",
+  "tags": ["type:lib", "lib:config"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p libs/config/tsconfig.json"
+      }
+    }
+  }
+}
