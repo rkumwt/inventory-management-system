@@ -34,6 +34,15 @@ describe('resolveRoute', () => {
     ['/v1/auth/login', { upstream: 'auth', path: '/auth/login' }],
     ['/v1/users?page=2', { upstream: 'auth', path: '/users?page=2' }],
     ['/v1/users/42/role', { upstream: 'auth', path: '/users/42/role' }],
+    ['/v1/categories', { upstream: 'product', path: '/categories' }],
+    [
+      '/v1/products?search=drill',
+      { upstream: 'product', path: '/products?search=drill' },
+    ],
+    [
+      '/v1/warehouses/7/locations',
+      { upstream: 'warehouse', path: '/warehouses/7/locations' },
+    ],
   ])('maps %s', (url, expected) => {
     expect(resolveRoute(url)).toEqual(expected);
   });

@@ -3,9 +3,10 @@
 An MVP of an enterprise-style inventory system, built as an Nx monorepo of
 NestJS microservices with a Next.js frontend.
 
-> **Build status:** Phase 2 of 7 is complete: `auth-service` and `api-gateway`
-> run and login works end to end. The remaining services and the frontend
-> arrive in later phases; see [Roadmap](#roadmap).
+> **Build status:** Phase 3 of 7 is complete: login works end to end and the
+> product catalogue and warehouses can be managed through the gateway. The
+> remaining services and the frontend arrive in later phases; see
+> [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -93,12 +94,15 @@ Key rules:
 apps/
   api-gateway/            entry point: JWT check, rate limit, routing
   auth-service/           users, login, refresh, logout
+  product-service/        categories, products (SKU, price, JSONB attributes)
+  warehouse-service/      warehouses and their storage locations
   ...                     remaining services and web arrive in later phases
 libs/
   config/                 Zod env schemas + fail-fast validator
   common/                 guards, decorators, error filter, pagination, logger
   events/                 event names, payload contracts, envelope
-  database/               TypeORM options factory, base entity, naming strategy
+  database/               TypeORM options factory, base entity, naming strategy,
+                          Postgres error helpers, health check
 docker/postgres/          init script: one database per service
 docker-compose.yml        Postgres, Redis, RabbitMQ
 tools/scaffold-app.sh     writes the Nx/Jest/Vite boilerplate for a new app
@@ -138,10 +142,12 @@ curl -s -X POST http://localhost:4000/v1/auth/login \
 
 Services:
 
-| App                                         | Port | API docs                     | Health    |
-| ------------------------------------------- | ---- | ---------------------------- | --------- |
-| [api-gateway](apps/api-gateway/README.md)   | 4000 | <http://localhost:4000/docs> | `/health` |
-| [auth-service](apps/auth-service/README.md) | 4001 | <http://localhost:4001/docs> | `/health` |
+| App                                                   | Port | API docs                     | Health    |
+| ----------------------------------------------------- | ---- | ---------------------------- | --------- |
+| [api-gateway](apps/api-gateway/README.md)             | 4000 | <http://localhost:4000/docs> | `/health` |
+| [auth-service](apps/auth-service/README.md)           | 4001 | <http://localhost:4001/docs> | `/health` |
+| [product-service](apps/product-service/README.md)     | 4002 | <http://localhost:4002/docs> | `/health` |
+| [warehouse-service](apps/warehouse-service/README.md) | 4003 | <http://localhost:4003/docs> | `/health` |
 
 Local infrastructure:
 
@@ -248,6 +254,21 @@ Choices made where the brief was open, favouring the simpler option:
     gives rotation, logout and reuse detection without a session store.
 15. **Unit and integration tests are separate targets** (`test`, `test-int`),
     so unit tests never need Docker. CI runs both.
+16. **Products and warehouses are archived, never deleted.** `DELETE` sets
+    `isActive=false`. Stock and orders in other services refer to these IDs,
+    and with a database per service there is no foreign key to protect those
+    references. Categories and storage locations, which nothing outside
+    their own service refers to, are deleted for real.
+17. **Uniqueness is enforced by database constraints,** and the services
+    translate the constraint violation into a `409` with a specific error
+    code. There is no "check first, then insert", which would still lose a
+    race between two concurrent requests.
+18. **Product search uses `ILIKE`** on SKU and name, which is a sequential
+    scan. That is fine at MVP size; a `pg_trgm` index is the next step if
+    the catalogue grows. Attribute filtering does use an index (GIN).
+19. **Seed rows have fixed IDs,** so the seed data of later services (stock
+    levels, orders) can refer to the same products and warehouses without
+    calling across services at startup.
 
 ## Roadmap
 
@@ -255,8 +276,8 @@ Choices made where the brief was open, favouring the simpler option:
 | ----- | --------------------------------------------------------------- | ------- |
 | 1     | Workspace, tooling, shared libs, Docker Compose, root README    | Done    |
 | 2     | auth-service + api-gateway, login working end to end            | Done    |
-| 3     | product-service, warehouse-service                              | Next    |
-| 4     | inventory-service: stock rules, movement history                | Pending |
+| 3     | product-service, warehouse-service                              | Done    |
+| 4     | inventory-service: stock rules, movement history                | Next    |
 | 5     | order-service (Saga, Outbox, idempotency), notification-service | Pending |
 | 6     | Next.js frontend, all MVP screens                               | Pending |
 | 7     | Tests, Swagger, Dockerfiles, GitHub Actions, final README       | Pending |

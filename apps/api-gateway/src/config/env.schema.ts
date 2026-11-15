@@ -15,6 +15,8 @@ export const gatewayEnvSchema = z.object({
 
   // Downstream services (one entry per service as later phases add them)
   AUTH_SERVICE_URL: serviceUrl,
+  PRODUCT_SERVICE_URL: serviceUrl,
+  WAREHOUSE_SERVICE_URL: serviceUrl,
 
   // Resilience for synchronous calls
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),

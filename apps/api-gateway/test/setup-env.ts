@@ -17,6 +17,8 @@ Object.assign(process.env, {
   REDIS_URL: redisUrl.toString(),
   JWT_ACCESS_SECRET: 'integration-test-access-secret-0123456789',
   AUTH_SERVICE_URL: `http://127.0.0.1:${STUB_UPSTREAM_PORT}`,
+  PRODUCT_SERVICE_URL: `http://127.0.0.1:${STUB_UPSTREAM_PORT}`,
+  WAREHOUSE_SERVICE_URL: `http://127.0.0.1:${STUB_UPSTREAM_PORT}`,
   UPSTREAM_TIMEOUT_MS: '1000',
   UPSTREAM_RETRIES: '1',
   RATE_LIMIT_MAX: '100',
