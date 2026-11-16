@@ -20,6 +20,8 @@ export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    if (context.getType() !== 'http') return true;
+
     const targets = [context.getHandler(), context.getClass()];
 
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets)) {

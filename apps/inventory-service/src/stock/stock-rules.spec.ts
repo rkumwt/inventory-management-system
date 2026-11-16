@@ -1,9 +1,12 @@
 import {
   availableQuantity,
   crossedLowStockThreshold,
+  findShortages,
   isLowStock,
   quantityAfterStockIn,
   quantityAfterStockOut,
+  reservedAfterRelease,
+  reservedAfterReserve,
   StockLevels,
   StockRuleError,
 } from './stock-rules';
@@ -81,13 +84,81 @@ describe('stock rules', () => {
     });
 
     it('reports the crossing only when a change takes the item below the line', () => {
-      expect(crossedLowStockThreshold(levels({ quantity: 8 }), 5)).toBe(true);
+      const crossed = (before: number, after: number) =>
+        crossedLowStockThreshold(
+          levels({ quantity: before }),
+          levels({ quantity: after }),
+        );
+
+      expect(crossed(8, 5)).toBe(true);
       // Still above the threshold.
-      expect(crossedLowStockThreshold(levels({ quantity: 8 }), 6)).toBe(false);
+      expect(crossed(8, 6)).toBe(false);
       // Was already low: not a new crossing.
-      expect(crossedLowStockThreshold(levels({ quantity: 4 }), 2)).toBe(false);
+      expect(crossed(4, 2)).toBe(false);
       // Restocking never counts.
-      expect(crossedLowStockThreshold(levels({ quantity: 4 }), 50)).toBe(false);
+      expect(crossed(4, 50)).toBe(false);
+    });
+
+    it('also counts a reservation that eats into available stock', () => {
+      expect(
+        crossedLowStockThreshold(
+          levels({ quantity: 20 }),
+          levels({ quantity: 20, reservedQuantity: 16 }),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('reservations', () => {
+    it('reserves available units and releases them again', () => {
+      const reserved = reservedAfterReserve(levels(), 8);
+      expect(reserved).toBe(8);
+      expect(
+        reservedAfterRelease(levels({ reservedQuantity: reserved }), 8),
+      ).toBe(0);
+    });
+
+    it('cannot reserve more than is available', () => {
+      expect(() =>
+        reservedAfterReserve(levels({ reservedQuantity: 15 }), 6),
+      ).toThrow(expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }));
+    });
+
+    it('never releases below zero', () => {
+      expect(reservedAfterRelease(levels({ reservedQuantity: 2 }), 5)).toBe(0);
+    });
+
+    it('lists every line that cannot be reserved in full', () => {
+      const stock = new Map([
+        ['drill', { quantity: 10, reservedQuantity: 4 }],
+        ['saw', { quantity: 3, reservedQuantity: 0 }],
+      ]);
+
+      expect(
+        findShortages(
+          [
+            { productId: 'drill', quantity: 6 },
+            { productId: 'saw', quantity: 5 },
+            { productId: 'unknown', quantity: 1 },
+          ],
+          stock,
+        ),
+      ).toEqual([
+        { productId: 'saw', requested: 5, available: 3 },
+        { productId: 'unknown', requested: 1, available: 0 },
+      ]);
+    });
+
+    it('adds up repeated lines for the same product before checking', () => {
+      const stock = new Map([['drill', { quantity: 10, reservedQuantity: 0 }]]);
+      const lines = [
+        { productId: 'drill', quantity: 6 },
+        { productId: 'drill', quantity: 6 },
+      ];
+
+      expect(findShortages(lines, stock)).toEqual([
+        { productId: 'drill', requested: 12, available: 10 },
+      ]);
     });
   });
 });

@@ -1,9 +1,10 @@
-import { Paginated, paginate, toSkip } from '@ims/common';
+import { getCorrelationId, Paginated, paginate, toSkip } from '@ims/common';
+import { addToOutbox } from '@ims/database';
+import { createEvent, EventName } from '@ims/events';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -20,11 +21,36 @@ import { VersionConflictError, withOptimisticRetry } from './optimistic-retry';
 import { StockItem } from './stock-item.entity';
 import { MovementType, StockMovement } from './stock-movement.entity';
 import {
+  availableQuantity,
   crossedLowStockThreshold,
   quantityAfterStockIn,
   quantityAfterStockOut,
   StockRuleError,
 } from './stock-rules';
+
+/** The event announcing that an item just dropped to or below its threshold. */
+export function lowStockEvent(
+  item: Pick<
+    StockItem,
+    | 'productId'
+    | 'warehouseId'
+    | 'quantity'
+    | 'reservedQuantity'
+    | 'lowStockThreshold'
+  >,
+  correlationId: string | undefined,
+) {
+  return createEvent(
+    EventName.LowStockDetected,
+    {
+      productId: item.productId,
+      warehouseId: item.warehouseId,
+      availableQuantity: availableQuantity(item),
+      threshold: item.lowStockThreshold,
+    },
+    correlationId ?? randomUUID(),
+  );
+}
 
 /** Who is making the change, and the token to act on their behalf with. */
 export interface Actor {
@@ -60,8 +86,6 @@ interface MovementDetails {
  */
 @Injectable()
 export class StockService {
-  private readonly logger = new Logger(StockService.name);
-
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly catalog: CatalogClient,
@@ -247,10 +271,10 @@ export class StockService {
       }),
     );
 
-    if (crossedLowStockThreshold(item, quantity)) {
-      // Phase 5 publishes a LowStockDetected event here, through the outbox.
-      this.logger.warn(
-        `Low stock: product ${item.productId} in warehouse ${item.warehouseId} is down to ${quantity - item.reservedQuantity} available (threshold ${item.lowStockThreshold})`,
+    if (crossedLowStockThreshold(item, { ...item, quantity })) {
+      await addToOutbox(
+        manager,
+        lowStockEvent({ ...item, quantity }, getCorrelationId()),
       );
     }
 

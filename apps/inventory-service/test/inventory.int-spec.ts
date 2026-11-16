@@ -75,7 +75,9 @@ describe('inventory-service (integration)', () => {
     await app.init();
 
     dataSource = app.get(DataSource);
-    await dataSource.query('TRUNCATE TABLE stock_movements, stock_items');
+    await dataSource.query(
+      'TRUNCATE TABLE stock_movements, stock_items, stock_reservations, outbox_events, processed_events',
+    );
     http = request(app.getHttpServer());
     manager = tokenFor(Role.Manager);
     staff = tokenFor(Role.Staff);
@@ -292,6 +294,56 @@ describe('inventory-service (integration)', () => {
     expect(
       low.body.data.map((row: { warehouseId: string }) => row.warehouseId),
     ).toEqual([LONDON]);
+  });
+
+  it('records a LowStockDetected event when a stock-out crosses the threshold', async () => {
+    await post('stock-in', {
+      productId: SAW,
+      warehouseId: LONDON,
+      quantity: 10,
+    }).expect(201);
+    const item = await stockOf(SAW, LONDON);
+    await http
+      .patch(`/inventory/${item?.id}/threshold`)
+      .set('Authorization', manager)
+      .send({ lowStockThreshold: 4 })
+      .expect(200);
+
+    const lowStockEvents = () =>
+      dataSource.query(
+        `SELECT payload FROM outbox_events WHERE event_name = 'stock.low_detected' AND payload->'payload'->>'productId' = $1`,
+        [SAW],
+      );
+
+    // 10 -> 6: still above the threshold, so no event.
+    await post('stock-out', {
+      productId: SAW,
+      warehouseId: LONDON,
+      quantity: 4,
+    }).expect(201);
+    expect(await lowStockEvents()).toHaveLength(0);
+
+    // 6 -> 3: crosses it. The event is written with the stock change.
+    await post('stock-out', {
+      productId: SAW,
+      warehouseId: LONDON,
+      quantity: 3,
+    }).expect(201);
+    const [row] = await lowStockEvents();
+    expect(row.payload.payload).toEqual({
+      productId: SAW,
+      warehouseId: LONDON,
+      availableQuantity: 3,
+      threshold: 4,
+    });
+
+    // 3 -> 2: already low, so it is not announced again.
+    await post('stock-out', {
+      productId: SAW,
+      warehouseId: LONDON,
+      quantity: 1,
+    }).expect(201);
+    expect(await lowStockEvents()).toHaveLength(1);
   });
 
   it('keeps a complete movement history, newest first', async () => {

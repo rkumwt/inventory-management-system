@@ -1,0 +1,40 @@
+{
+  "name": "order-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/order-service/src",
+  "projectType": "application",
+  "tags": ["type:app"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/order-service"],
+      "options": {
+        "command": "vite build --config apps/order-service/vite.config.mts"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "dependsOn": ["build"],
+      "options": {
+        "commands": [
+          "vite build --config apps/order-service/vite.config.mts --mode development --watch",
+          "node --watch --enable-source-maps dist/apps/order-service/main.js"
+        ],
+        "parallel": true
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/order-service/tsconfig.json"
+      }
+    },
+    "test-int": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest -c apps/order-service/jest.int.config.js --runInBand --passWithNoTests"
+      }
+    }
+  }
+}

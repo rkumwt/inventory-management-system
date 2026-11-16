@@ -75,10 +75,15 @@ export function configureHttpApp(
 /** Creates, configures and starts an HTTP service. Used by every `main.ts`. */
 export async function bootstrapHttpService(
   rootModule: Type<unknown>,
-  options: HttpAppOptions & { port: number },
+  options: HttpAppOptions & {
+    port: number;
+    /** Runs before the app starts listening, e.g. to attach event consumers. */
+    beforeListen?: (app: INestApplication) => Promise<void>;
+  },
 ): Promise<INestApplication> {
   const app = await NestFactory.create(rootModule, { bufferLogs: true });
   configureHttpApp(app, options);
+  await options.beforeListen?.(app);
   await app.listen(options.port);
   app
     .get(Logger)

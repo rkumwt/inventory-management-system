@@ -14,6 +14,10 @@ Object.assign(process.env, {
   DB_MIGRATIONS_RUN: 'true',
   SEED_DATA: 'false',
   JWT_ACCESS_SECRET: 'integration-test-access-secret-0123456789',
+  // No broker in these tests: handlers are called directly and the outbox
+  // table is inspected instead of a queue.
+  RABBITMQ_URL: 'amqp://unused:unused@127.0.0.1:1',
+  OUTBOX_RELAY_ENABLED: 'false',
   // The catalog client is replaced by a fake in the tests; these are unused.
   PRODUCT_SERVICE_URL: 'http://127.0.0.1:1',
   WAREHOUSE_SERVICE_URL: 'http://127.0.0.1:1',

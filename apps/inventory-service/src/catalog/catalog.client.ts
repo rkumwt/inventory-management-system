@@ -1,4 +1,8 @@
-import { CORRELATION_ID_HEADER, getCorrelationId } from '@ims/common';
+import {
+  CORRELATION_ID_HEADER,
+  fetchWithRetry,
+  getCorrelationId,
+} from '@ims/common';
 import {
   BadRequestException,
   Inject,
@@ -20,11 +24,6 @@ export interface CatalogOptions {
 }
 
 type Resource = 'product' | 'warehouse';
-
-const RETRYABLE_STATUSES = new Set([502, 503, 504]);
-
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Synchronous lookups in the services that own products and warehouses.
@@ -98,37 +97,26 @@ export class CatalogClient {
     url: string,
     authorization: string,
   ): Promise<Response> {
-    const attempts = 1 + this.options.retries;
     const headers: Record<string, string> = { authorization };
     const correlationId = getCorrelationId();
     if (correlationId) headers[CORRELATION_ID_HEADER] = correlationId;
 
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      const isLastAttempt = attempt === attempts;
-      try {
-        const response = await fetch(url, {
-          headers,
-          signal: AbortSignal.timeout(this.options.timeoutMs),
-        });
-        if (!RETRYABLE_STATUSES.has(response.status) || isLastAttempt) {
-          return response;
-        }
-        lastError = new Error(`HTTP ${response.status}`);
-      } catch (error) {
-        lastError = error;
-      }
-
-      if (!isLastAttempt) {
-        this.logger.warn(
-          `${resource} lookup failed (attempt ${attempt}/${attempts}): ${describe(lastError)}`,
-        );
-        await sleep(this.options.retryDelayMs * 2 ** (attempt - 1));
-      }
+    try {
+      return await fetchWithRetry(
+        url,
+        { headers },
+        {
+          ...this.options,
+          onRetry: (attempt, attempts, error) =>
+            this.logger.warn(
+              `${resource} lookup failed (attempt ${attempt}/${attempts}): ${describe(error)}`,
+            ),
+        },
+      );
+    } catch (error) {
+      this.logger.error(`${resource} lookup unavailable: ${describe(error)}`);
+      throw unavailable(resource);
     }
-
-    this.logger.error(`${resource} lookup unavailable: ${describe(lastError)}`);
-    throw unavailable(resource);
   }
 }
 

@@ -63,6 +63,10 @@ export const rabbitmqEnvSchema = z.object({
   RABBITMQ_URL: z
     .string()
     .regex(/^amqps?:\/\/.+/, 'must be an amqp:// or amqps:// URL'),
+  /** How often the outbox relay looks for unpublished events. */
+  OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
+  /** Set to false to stop this instance publishing (tests do this). */
+  OUTBOX_RELAY_ENABLED: booleanFlag(true),
 });
 
 export const redisEnvSchema = z.object({

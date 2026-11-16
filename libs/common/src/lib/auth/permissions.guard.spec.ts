@@ -38,6 +38,7 @@ function contextFor(
   return {
     getHandler: () => TestController.prototype[handler],
     getClass: () => TestController,
+    getType: () => 'http',
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
   } as unknown as ExecutionContext;
 }

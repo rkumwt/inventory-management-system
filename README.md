@@ -3,10 +3,10 @@
 An MVP of an enterprise-style inventory system, built as an Nx monorepo of
 NestJS microservices with a Next.js frontend.
 
-> **Build status:** Phase 4 of 7 is complete: login, the product catalogue,
-> warehouses and stock (in, out, transfer, movement history) all work through
-> the gateway. Orders, notifications and the frontend arrive in later phases;
-> see [Roadmap](#roadmap).
+> **Build status:** Phase 5 of 7 is complete: every backend service runs, and
+> an order placed through the gateway reserves stock, is confirmed or
+> cancelled, and triggers a notification, all through events. The frontend
+> arrives in Phase 6; see [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -28,6 +28,9 @@ flowchart LR
   gw --> warehouse
   gw --> inventory
   gw --> order
+  gw --> notification
+  order -->|sync: prices| product
+  inventory -->|sync: ID checks| product
   gw -.->|rate-limit counters| redis[("Redis")]
 
   auth --- authdb[("ims_auth")]
@@ -58,14 +61,28 @@ sequenceDiagram
     MQ->>O: StockReserved
     O->>MQ: OrderConfirmed (order is CONFIRMED)
   else not enough stock
-    I->>MQ: StockReservationFailed
+    I->>MQ: StockReservationFailed (nothing was reserved)
     MQ->>O: StockReservationFailed
     O->>MQ: OrderCancelled (order is CANCELLED)
+  end
+  opt a user cancels a pending or confirmed order
+    O->>MQ: OrderCancelled (order is CANCELLED)
     MQ->>I: OrderCancelled
-    I->>MQ: StockReleased (compensation, if anything was held)
+    I->>MQ: StockReleased (compensation: reservation given back)
   end
   MQ->>N: OrderConfirmed / OrderCancelled / LowStockDetected
 ```
+
+How one step works, taking "inventory-service reserves stock" as the example:
+
+1. RabbitMQ delivers `OrderCreated` to the `ims.inventory.events` queue.
+2. In **one database transaction** inventory-service records the event ID
+   (so a redelivery is recognised), reserves the stock, and writes
+   `StockReserved` to its `outbox_events` table.
+3. It acknowledges the message. If it crashes before that, RabbitMQ
+   redelivers and step 2 sees the event ID and does nothing.
+4. The outbox relay publishes `StockReserved` and marks the row published. If
+   RabbitMQ is down the row simply waits; nothing is lost, events are late.
 
 Key rules:
 
@@ -96,14 +113,18 @@ apps/
   auth-service/           users, login, refresh, logout
   product-service/        categories, products (SKU, price, JSONB attributes)
   warehouse-service/      warehouses and their storage locations
-  inventory-service/      stock levels, stock in/out/transfer, movement history
-  ...                     remaining services and web arrive in later phases
+  inventory-service/      stock levels, movements, reservations for orders
+  order-service/          orders and the saga that reserves stock for them
+  notification-service/   turns events into (mock) emails
+  web/                    Next.js frontend (Phase 6)
 libs/
   config/                 Zod env schemas + fail-fast validator
-  common/                 guards, decorators, error filter, pagination, logger
+  common/                 guards, decorators, error filter, pagination, logger,
+                          RabbitMQ publisher and consumer helpers
   events/                 event names, payload contracts, envelope
   database/               TypeORM options factory, base entity, naming strategy,
-                          Postgres error helpers, health check
+                          Postgres error helpers, health check, outbox relay,
+                          idempotent-consumer helper
 docker/postgres/          init script: one database per service
 docker-compose.yml        Postgres, Redis, RabbitMQ
 tools/scaffold-app.sh     writes the Nx/Jest/Vite boilerplate for a new app
@@ -118,7 +139,7 @@ apps      -> libs only (an app can never import another app)
 config    -> (nothing)
 events    -> (nothing)
 common    -> config, events
-database  -> config, common
+database  -> config, common, events
 ```
 
 ## Getting started
@@ -143,13 +164,15 @@ curl -s -X POST http://localhost:4000/v1/auth/login \
 
 Services:
 
-| App                                                   | Port | API docs                     | Health    |
-| ----------------------------------------------------- | ---- | ---------------------------- | --------- |
-| [api-gateway](apps/api-gateway/README.md)             | 4000 | <http://localhost:4000/docs> | `/health` |
-| [auth-service](apps/auth-service/README.md)           | 4001 | <http://localhost:4001/docs> | `/health` |
-| [product-service](apps/product-service/README.md)     | 4002 | <http://localhost:4002/docs> | `/health` |
-| [warehouse-service](apps/warehouse-service/README.md) | 4003 | <http://localhost:4003/docs> | `/health` |
-| [inventory-service](apps/inventory-service/README.md) | 4004 | <http://localhost:4004/docs> | `/health` |
+| App                                                         | Port | API docs                     | Health    |
+| ----------------------------------------------------------- | ---- | ---------------------------- | --------- |
+| [api-gateway](apps/api-gateway/README.md)                   | 4000 | <http://localhost:4000/docs> | `/health` |
+| [auth-service](apps/auth-service/README.md)                 | 4001 | <http://localhost:4001/docs> | `/health` |
+| [product-service](apps/product-service/README.md)           | 4002 | <http://localhost:4002/docs> | `/health` |
+| [warehouse-service](apps/warehouse-service/README.md)       | 4003 | <http://localhost:4003/docs> | `/health` |
+| [inventory-service](apps/inventory-service/README.md)       | 4004 | <http://localhost:4004/docs> | `/health` |
+| [order-service](apps/order-service/README.md)               | 4005 | <http://localhost:4005/docs> | `/health` |
+| [notification-service](apps/notification-service/README.md) | 4006 | <http://localhost:4006/docs> | `/health` |
 
 Local infrastructure:
 
@@ -286,9 +309,48 @@ Choices made where the brief was open, favouring the simpler option:
 23. **Stock responses carry IDs, not product or warehouse names.** Copying
     names into inventory-service would need events to keep them fresh; the
     frontend joins them from the catalogue instead.
-24. **Low stock is a flag and a filter in this phase.** The moment an item
-    crosses its threshold is detected and logged; the `LowStockDetected`
-    event is published in Phase 5, together with the outbox.
+24. **Low stock is announced once per crossing.** Stock items carry a flag
+    and can be filtered by it; the `LowStockDetected` event is published
+    only at the moment an item drops to or below its threshold, not on every
+    later movement while it stays low.
+25. **One topic exchange, one queue per consuming service.** Events are
+    published to `ims.events` with the event name as routing key; each
+    service's queue is bound once per event it handles. Publishers do not
+    know who is listening, and adding a consumer needs no publisher change.
+    This uses the NestJS RabbitMQ transport's exchange support, not a custom
+    client.
+26. **The outbox relay polls** (every second by default) rather than tailing
+    the database log. Polling is a few lines of code and adds at most a
+    second of delay; change-data-capture is the upgrade if that matters.
+27. **Delivery is at-least-once; handlers are idempotent.** Every handler
+    records the event ID and does its work in one transaction. A message
+    that fails is retried once, then moved to a dead-letter queue
+    (`ims.events.dlq`) instead of blocking the queue.
+28. **Each consumer handles one message at a time** (`prefetch 1`). It keeps
+    a service's events in order; throughput comes from running more
+    instances. Because instances can still interleave, inventory-service
+    also copes with a cancellation that overtakes its order.
+29. **An order is reserved all-or-nothing from one warehouse.** No partial
+    fulfilment and no splitting across warehouses.
+30. **Placing an order returns `PENDING` immediately.** Prices are fetched
+    synchronously from product-service (and copied onto the order); stock is
+    checked asynchronously by the saga. The client polls the order to see it
+    become `CONFIRMED` or `CANCELLED`.
+31. **Order status changes are single conditional updates**
+    (`UPDATE ... WHERE id = ? AND status IN (...)`), which is all the
+    locking the state machine needs: of two racing changes, one matches.
+32. **Confirmed orders keep their stock reserved.** Shipping (which would
+    turn a reservation into a stock-out) is outside the three statuses the
+    MVP asks for.
+33. **Emails are mocked.** notification-service logs and stores each email
+    behind an `EmailSender` interface; a real provider is a one-line swap.
+34. **Integration tests do not need RabbitMQ.** They call event handlers
+    directly and drive the outbox relay with a fake publisher, so they test
+    the logic, not the broker. The broker wiring was verified by hand,
+    including an outage: orders placed while RabbitMQ was stopped completed
+    once it was back.
+35. **`amqp-connection-manager` is pinned to v4.** v5 depends on an ESM-only
+    package that Jest cannot `require` on Node 22.12.
 
 ## Roadmap
 
@@ -298,6 +360,6 @@ Choices made where the brief was open, favouring the simpler option:
 | 2     | auth-service + api-gateway, login working end to end            | Done    |
 | 3     | product-service, warehouse-service                              | Done    |
 | 4     | inventory-service: stock rules, movement history                | Done    |
-| 5     | order-service (Saga, Outbox, idempotency), notification-service | Next    |
-| 6     | Next.js frontend, all MVP screens                               | Pending |
+| 5     | order-service (Saga, Outbox, idempotency), notification-service | Done    |
+| 6     | Next.js frontend, all MVP screens                               | Next    |
 | 7     | Tests, Swagger, Dockerfiles, GitHub Actions, final README       | Pending |
