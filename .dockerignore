@@ -1,0 +1,21 @@
+# Keeps the build context small and secrets out of images.
+.git
+.github
+.husky
+.nx
+node_modules
+**/node_modules
+dist
+coverage
+**/.next
+**/next-env.d.ts
+
+# Real configuration never goes into an image; it is injected at run time.
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+**/*.md
+docker
+docker-compose.yml

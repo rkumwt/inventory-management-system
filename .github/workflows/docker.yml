@@ -1,0 +1,96 @@
+name: Docker images
+
+# Builds one image per app, tagged with the commit SHA.
+#
+# - On main (after a merge): every image is built. Pushing to Amazon ECR and
+#   deploying are marked TODO below; they need an AWS account.
+# - On a pull request: images are built (never pushed) only when something
+#   that affects them changed, so a broken Dockerfile is caught in review.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '**/Dockerfile'
+      - 'tools/nest-service.Dockerfile.tpl'
+      - '.dockerignore'
+      - '.github/workflows/docker.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  # id-token: write   # TODO(aws): needed for OIDC login to AWS (no stored keys)
+
+env:
+  # TODO(aws): replace with <account>.dkr.ecr.<region>.amazonaws.com
+  REGISTRY: ims
+
+jobs:
+  build:
+    name: Build ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - api-gateway
+          - auth-service
+          - product-service
+          - warehouse-service
+          - inventory-service
+          - order-service
+          - notification-service
+          - web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # TODO(aws): authenticate with a short-lived role, then log in to ECR.
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v6
+      #   with:
+      #     role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+      #     aws-region: ${{ vars.AWS_REGION }}
+      # - name: Log in to Amazon ECR
+      #   uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          # Immutable tag: an image can always be traced to its commit, and a
+          # rollback is "deploy the previous SHA".
+          tags: ${{ env.REGISTRY }}/${{ matrix.app }}:${{ github.sha }}
+          # Only used by the web image; the address is compiled into the
+          # browser bundle. TODO(aws): set per environment.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:4000/v1' }}
+          # TODO(aws): set to true on main once the ECR login above is enabled.
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # TODO(aws): deploy after all images are pushed. With ECS Fargate this is
+  # one "update service" per app, pointing its task definition at the new
+  # image tag, then waiting for the service to become stable:
+  #
+  # deploy:
+  #   needs: build
+  #   if: github.ref == 'refs/heads/main'
+  #   environment: production   # adds a manual approval gate
+  #   steps:
+  #     - run database migrations as a one-off task (DB_MIGRATIONS_RUN=false in the services)
+  #     - aws ecs update-service --force-new-deployment ... (per service)
+  #     - aws ecs wait services-stable ...

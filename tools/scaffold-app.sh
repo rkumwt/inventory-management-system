@@ -1,8 +1,9 @@
 #!/bin/sh
-# Writes the Nx/TypeScript/Jest/Vite boilerplate for a NestJS app.
-# Usage: tools/scaffold-app.sh <app-name>
+# Writes the Nx/TypeScript/Jest/Vite/Docker boilerplate for a NestJS app.
+# Usage: tools/scaffold-app.sh <app-name> [port]
 set -eu
 app="$1"
+port="${2:-4000}"
 dir="apps/$app"
 mkdir -p "$dir/src"
 
@@ -84,4 +85,7 @@ module.exports = {
   testTimeout: 30000,
 };
 JS
+sed -e "s/__APP__/$app/g" -e "s/__PORT__/$port/g" \
+  tools/nest-service.Dockerfile.tpl > "$dir/Dockerfile"
+
 echo "scaffolded $dir"

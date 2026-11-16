@@ -3,10 +3,15 @@
 An MVP of an enterprise-style inventory system, built as an Nx monorepo of
 NestJS microservices with a Next.js frontend.
 
-> **Build status:** Phase 6 of 7 is complete: all seven backend services and
-> the web frontend run with one command, and every MVP screen works against
-> the real API. Dockerfiles, the image-build workflow and the final pass
-> arrive in Phase 7; see [Roadmap](#roadmap).
+Seven backend services and a web frontend run locally with one command.
+Placing an order reserves stock, confirms or cancels the order and sends a
+notification, entirely through events.
+
+- **New here?** Start with [Getting started](#getting-started).
+- **Want the reasoning?** See [Decisions](#decisions) and the
+  [5-minute architecture summary](docs/interview-summary.md).
+- **Going to production?** See [Deploying to AWS](#deploying-to-aws) and
+  [Known limitations](#known-limitations).
 
 ## Architecture
 
@@ -210,6 +215,101 @@ Databases created on first start: `ims_auth`, `ims_product`, `ims_warehouse`,
 Run one project: `pnpm nx test common`. Run only what a change affects:
 `pnpm nx affected -t lint typecheck test build`.
 
+## Testing
+
+| Kind        | Command         | Needs                    | What it covers                                                      |
+| ----------- | --------------- | ------------------------ | ------------------------------------------------------------------- |
+| Unit        | `pnpm test`     | nothing                  | Pure logic: stock rules, order state machine, guards, API client... |
+| Integration | `pnpm test:int` | Postgres, Redis (Docker) | Each service booted for real against its own test database          |
+
+- **The core rules are pure functions**, so they are tested without mocks:
+  stock rules (`apps/inventory-service/src/stock/stock-rules.ts`) and the
+  order state machine (`apps/order-service/src/saga/order-state.ts`).
+- **Every service has an integration test** that starts the real Nest
+  application, runs its migrations on a `*_test` database and drives it over
+  HTTP. Calls to other services are replaced with fakes.
+- **Concurrency is tested for real**: simultaneous stock-outs and
+  simultaneous orders against the same stock must never oversell.
+- **Event flows are tested without a broker**: handlers are called directly
+  (including duplicate and out-of-order deliveries) and the outbox relay is
+  driven with a fake publisher.
+
+## CI/CD
+
+Two GitHub Actions workflows:
+
+| Workflow                                     | Runs on                                                 | Does                                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ci.yml`](.github/workflows/ci.yml)         | every PR, and `main`                                    | Install, commit-message check, format check, then lint, type-check, test, build and integration tests for the projects the change affects (`nx affected`) |
+| [`docker.yml`](.github/workflows/docker.yml) | `main`, and PRs that touch a Dockerfile or dependencies | Builds one image per app, tagged with the commit SHA                                                                                                      |
+
+Pushing images to Amazon ECR and deploying are marked `TODO(aws)` in
+`docker.yml`, with the steps written out as comments; they need an AWS
+account. The intended flow is trunk-based: short-lived branch, PR, green CI,
+squash-merge, images built from `main`, deploy by SHA.
+
+## Docker images
+
+Each app has a multi-stage `Dockerfile` that runs as the unprivileged `node`
+user. The build context is the repository root:
+
+```bash
+docker build -f apps/order-service/Dockerfile -t ims/order-service .
+docker build -f apps/web/Dockerfile -t ims/web \
+  --build-arg NEXT_PUBLIC_API_URL=http://localhost:4000/v1 .
+```
+
+- The seven NestJS Dockerfiles are identical apart from the app name and
+  port; they are generated from `tools/nest-service.Dockerfile.tpl` by
+  `tools/scaffold-app.sh`, so they cannot drift apart.
+- Images contain no `.env` file. All configuration is injected as
+  environment variables at run time.
+- Each image has a `HEALTHCHECK` on the service's `/health` endpoint, and
+  handles `SIGTERM` (finish in-flight work, close connections, exit 0).
+
+## Deploying to AWS
+
+Nothing in the code is AWS-specific; each local piece has a managed
+equivalent, selected through environment variables:
+
+| Local (Docker Compose)       | AWS                                                    | Changes needed                               |
+| ---------------------------- | ------------------------------------------------------ | -------------------------------------------- |
+| Apps run with `pnpm dev`     | ECS Fargate, one service per app, images in ECR        | Enable the `TODO(aws)` steps in `docker.yml` |
+| Postgres, one DB per service | RDS for PostgreSQL (one instance, or one each)         | `DB_HOST`, `DB_SSL=true` per service         |
+| RabbitMQ                     | Amazon MQ for RabbitMQ                                 | `RABBITMQ_URL` (`amqps://`)                  |
+| Redis                        | ElastiCache                                            | `REDIS_URL`                                  |
+| `.env` files                 | Secrets Manager / SSM, injected by the task definition | none in code                                 |
+| Gateway on `localhost:4000`  | Application Load Balancer in front of api-gateway only | `CORS_ORIGINS`; other services stay private  |
+| JSON logs on stdout          | CloudWatch Logs                                        | none; search by `correlationId`              |
+
+Before a first production deploy: set `DB_MIGRATIONS_RUN=false` and run
+migrations as a one-off task, set `SEED_DATA=false`, and generate real
+`JWT_*_SECRET` values.
+
+## Known limitations
+
+Deliberate MVP boundaries, each with its upgrade path:
+
+- **No shipping step.** Orders stop at `CONFIRMED` with stock reserved.
+  Fulfilment would add a status and turn the reservation into a stock-out.
+- **Stock is per warehouse, not per storage location.**
+- **A stuck saga is not timed out.** If inventory-service were down for
+  long, orders would stay `PENDING` until it returned. A scheduled job that
+  cancels orders pending for too long is the usual addition.
+- **The dead-letter queue is not monitored or replayed.** Messages that fail
+  twice wait in `ims.events.dlq` for a human.
+- **Outbox rows and processed-event IDs are kept forever.** A periodic
+  clean-up of old rows is needed at volume.
+- **Access tokens cannot be revoked** before their 15-minute expiry, and a
+  role change takes effect at the next refresh.
+- **Health checks cover the database (or Redis) only**, not RabbitMQ.
+- **No end-to-end browser tests.** The frontend was checked by hand; the
+  warehouses screens and several dialogs were not clicked through.
+- **No metrics or tracing**, only correlated logs. OpenTelemetry is the next
+  step.
+- **Service images share one dependency set** (single `package.json`), so
+  each carries packages other services use.
+
 ## Configuration
 
 - All configuration comes from environment variables. Real `.env` files are
@@ -380,6 +480,17 @@ Choices made where the brief was open, favouring the simpler option:
 42. **The gateway's default rate limit is 600 requests a minute per IP**
     (was 120): one dashboard load is about ten requests, and a pending order
     polls.
+43. **Frontend packages are `devDependencies`.** With one `package.json`,
+    `dependencies` means "what the NestJS services need at run time", which
+    is what `pnpm install --prod` puts in their images. Next.js bundles what
+    the frontend needs at build time. This cut the service images from
+    1.24 GB to about 500 MB.
+44. **Images use `node:22-slim`** (Debian), not Alpine: the Argon2 native
+    module ships prebuilt binaries for glibc, so nothing is compiled in the
+    image.
+45. **The image workflow builds but does not push.** Registry login, push
+    and deploy are written as commented `TODO(aws)` steps, as the brief
+    asks, so the workflow is green without cloud credentials.
 
 ## Roadmap
 
@@ -391,4 +502,4 @@ Choices made where the brief was open, favouring the simpler option:
 | 4     | inventory-service: stock rules, movement history                | Done   |
 | 5     | order-service (Saga, Outbox, idempotency), notification-service | Done   |
 | 6     | Next.js frontend, all MVP screens                               | Done   |
-| 7     | Tests, Swagger, Dockerfiles, GitHub Actions, final README       | Next   |
+| 7     | Tests, Swagger, Dockerfiles, GitHub Actions, final README       | Done   |
