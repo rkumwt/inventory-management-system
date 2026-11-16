@@ -29,6 +29,7 @@ Defined in `src/proxy/routes.ts`. The `/v1` prefix is stripped when forwarding.
 | `/v1/users/*`                                          | auth-service      | access token              |
 | `/v1/categories/*`, `/v1/products/*`                   | product-service   | access token              |
 | `/v1/warehouses/*` (including `.../locations`)         | warehouse-service | access token              |
+| `/v1/inventory/*`                                      | inventory-service | access token              |
 
 Later phases add one line per new resource.
 
@@ -63,6 +64,7 @@ See `.env.example`. Shared values come from the root `.env`.
 | `AUTH_SERVICE_URL`          |         | Base URL of auth-service         |
 | `PRODUCT_SERVICE_URL`       |         | Base URL of product-service      |
 | `WAREHOUSE_SERVICE_URL`     |         | Base URL of warehouse-service    |
+| `INVENTORY_SERVICE_URL`     |         | Base URL of inventory-service    |
 | `UPSTREAM_TIMEOUT_MS`       | 5000    | Timeout per downstream call      |
 | `UPSTREAM_RETRIES`          | 2       | Extra attempts for GET requests  |
 | `RATE_LIMIT_WINDOW_SECONDS` | 60      | Rate-limit window                |

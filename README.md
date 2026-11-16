@@ -3,10 +3,10 @@
 An MVP of an enterprise-style inventory system, built as an Nx monorepo of
 NestJS microservices with a Next.js frontend.
 
-> **Build status:** Phase 3 of 7 is complete: login works end to end and the
-> product catalogue and warehouses can be managed through the gateway. The
-> remaining services and the frontend arrive in later phases; see
-> [Roadmap](#roadmap).
+> **Build status:** Phase 4 of 7 is complete: login, the product catalogue,
+> warehouses and stock (in, out, transfer, movement history) all work through
+> the gateway. Orders, notifications and the frontend arrive in later phases;
+> see [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -96,6 +96,7 @@ apps/
   auth-service/           users, login, refresh, logout
   product-service/        categories, products (SKU, price, JSONB attributes)
   warehouse-service/      warehouses and their storage locations
+  inventory-service/      stock levels, stock in/out/transfer, movement history
   ...                     remaining services and web arrive in later phases
 libs/
   config/                 Zod env schemas + fail-fast validator
@@ -148,6 +149,7 @@ Services:
 | [auth-service](apps/auth-service/README.md)           | 4001 | <http://localhost:4001/docs> | `/health` |
 | [product-service](apps/product-service/README.md)     | 4002 | <http://localhost:4002/docs> | `/health` |
 | [warehouse-service](apps/warehouse-service/README.md) | 4003 | <http://localhost:4003/docs> | `/health` |
+| [inventory-service](apps/inventory-service/README.md) | 4004 | <http://localhost:4004/docs> | `/health` |
 
 Local infrastructure:
 
@@ -269,6 +271,24 @@ Choices made where the brief was open, favouring the simpler option:
 19. **Seed rows have fixed IDs,** so the seed data of later services (stock
     levels, orders) can refer to the same products and warehouses without
     calling across services at startup.
+20. **Stock is tracked per product per warehouse,** not per storage location.
+    Locations are reference data for now; bin-level stock would add a
+    dimension to every stock rule without changing the architecture.
+21. **Stock changes use optimistic locking written out by hand**
+    (`UPDATE ... WHERE id = ? AND version = ?`, retried up to 3 times) rather
+    than TypeORM's `@VersionColumn`, so the mechanism is visible in one
+    place. `CHECK` constraints in the database are the last line of defence
+    against negative stock.
+22. **inventory-service checks product and warehouse IDs only the first time**
+    stock is recorded for a pair, with a synchronous call (timeout + retries)
+    to the owning service. Later movements need no cross-service call, so
+    day-to-day stock work keeps running if the catalogue is down.
+23. **Stock responses carry IDs, not product or warehouse names.** Copying
+    names into inventory-service would need events to keep them fresh; the
+    frontend joins them from the catalogue instead.
+24. **Low stock is a flag and a filter in this phase.** The moment an item
+    crosses its threshold is detected and logged; the `LowStockDetected`
+    event is published in Phase 5, together with the outbox.
 
 ## Roadmap
 
@@ -277,7 +297,7 @@ Choices made where the brief was open, favouring the simpler option:
 | 1     | Workspace, tooling, shared libs, Docker Compose, root README    | Done    |
 | 2     | auth-service + api-gateway, login working end to end            | Done    |
 | 3     | product-service, warehouse-service                              | Done    |
-| 4     | inventory-service: stock rules, movement history                | Next    |
-| 5     | order-service (Saga, Outbox, idempotency), notification-service | Pending |
+| 4     | inventory-service: stock rules, movement history                | Done    |
+| 5     | order-service (Saga, Outbox, idempotency), notification-service | Next    |
 | 6     | Next.js frontend, all MVP screens                               | Pending |
 | 7     | Tests, Swagger, Dockerfiles, GitHub Actions, final README       | Pending |
