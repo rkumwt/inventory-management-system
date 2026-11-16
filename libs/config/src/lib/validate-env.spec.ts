@@ -30,7 +30,7 @@ describe('validateEnv', () => {
       NODE_ENV: 'development',
       LOG_LEVEL: 'info',
       PORT: 3001,
-      CORS_ORIGINS: ['http://localhost:3000'],
+      CORS_ORIGINS: ['http://localhost:3001'],
       DB_HOST: 'localhost',
       DB_PORT: 5432,
       DB_USER: 'ims',

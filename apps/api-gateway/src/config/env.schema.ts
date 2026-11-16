@@ -28,7 +28,7 @@ export const gatewayEnvSchema = z.object({
 
   // Rate limiting (per client IP, counters stored in Redis)
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
-  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(600),
   /** Stricter limit for login / register / refresh to slow down guessing. */
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
 });

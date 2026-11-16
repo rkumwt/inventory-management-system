@@ -1,5 +1,6 @@
 import nx from '@nx/eslint-plugin';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * Module boundaries (enforced by @nx/enforce-module-boundaries):
@@ -21,6 +22,7 @@ export default [
       '**/dist',
       '**/coverage',
       '**/.next',
+      '**/next-env.d.ts',
       '**/node_modules',
       '**/out-tsc',
       '.nx',
@@ -82,6 +84,27 @@ export default [
   {
     files: ['scripts/**/*.mjs'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    // The frontend: React's rules of hooks, and no server code in the bundle.
+    files: ['apps/web/**/*.ts', 'apps/web/**/*.tsx'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@ims/*'],
+              message:
+                'The @ims libs are server code (NestJS, TypeORM). The frontend keeps its own copy of the API contract in src/lib/api/types.ts.',
+            },
+          ],
+        },
+      ],
+    },
   },
   prettier,
 ];
