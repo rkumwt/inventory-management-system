@@ -1,9 +1,9 @@
 import { configureHttpApp, Role } from '@ims/common';
+import { ensureTestDatabase } from '@ims/database';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
-import { ensureTestDatabase } from './test-database';
 
 /**
  * Boots the real AppModule against a real PostgreSQL database (migrations

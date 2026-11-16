@@ -6,7 +6,11 @@ import {
 import { UpstreamClient, UpstreamRequest } from './upstream.client';
 
 const client = new UpstreamClient({
-  baseUrls: { auth: 'http://auth.internal:4001' },
+  baseUrls: {
+    auth: 'http://auth.internal:4001',
+    product: 'http://product.internal:4002',
+    warehouse: 'http://warehouse.internal:4003',
+  },
   timeoutMs: 1000,
   retries: 2,
   retryDelayMs: 0,

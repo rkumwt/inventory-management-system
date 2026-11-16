@@ -5,6 +5,7 @@ import {
   Role,
   toSkip,
 } from '@ims/common';
+import { isUniqueViolation } from '@ims/database';
 import {
   BadRequestException,
   ConflictException,
@@ -12,7 +13,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, QueryFailedError, Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { PasswordService } from './password.service';
 import { User } from './user.entity';
 
@@ -22,8 +23,6 @@ export interface CreateUserInput {
   password: string;
   role: Role;
 }
-
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -68,13 +67,7 @@ export class UsersService {
       );
     } catch (error) {
       // Two concurrent registrations: the unique constraint is the real guard.
-      if (
-        error instanceof QueryFailedError &&
-        (error.driverError as { code?: string }).code ===
-          POSTGRES_UNIQUE_VIOLATION
-      ) {
-        throw emailTaken();
-      }
+      if (isUniqueViolation(error)) throw emailTaken();
       throw error;
     }
   }

@@ -1,6 +1,10 @@
 import { Client } from 'pg';
 
-/** Creates the test database if it does not exist yet. */
+/**
+ * Integration-test helper: creates the database named by DB_NAME if it does
+ * not exist yet. Refuses anything not ending in `_test`, so a misconfigured
+ * run can never touch a development database.
+ */
 export async function ensureTestDatabase(): Promise<void> {
   const database = process.env['DB_NAME'];
   if (!database?.endsWith('_test')) {

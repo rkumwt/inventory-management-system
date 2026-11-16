@@ -9,7 +9,11 @@ import {
 } from './upstream.client';
 
 const upstreamOptions: UpstreamOptions = {
-  baseUrls: { auth: env.AUTH_SERVICE_URL },
+  baseUrls: {
+    auth: env.AUTH_SERVICE_URL,
+    product: env.PRODUCT_SERVICE_URL,
+    warehouse: env.WAREHOUSE_SERVICE_URL,
+  },
   timeoutMs: env.UPSTREAM_TIMEOUT_MS,
   retries: env.UPSTREAM_RETRIES,
   retryDelayMs: 100,

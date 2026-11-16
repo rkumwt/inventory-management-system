@@ -10,3 +10,4 @@ export * from './lib/errors/all-exceptions.filter';
 export * from './lib/errors/error-response';
 export * from './lib/logger/logger';
 export * from './lib/pagination/pagination';
+export * from './lib/validation/query-boolean';

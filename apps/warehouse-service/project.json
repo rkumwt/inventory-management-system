@@ -1,0 +1,40 @@
+{
+  "name": "warehouse-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/warehouse-service/src",
+  "projectType": "application",
+  "tags": ["type:app"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/warehouse-service"],
+      "options": {
+        "command": "vite build --config apps/warehouse-service/vite.config.mts"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "dependsOn": ["build"],
+      "options": {
+        "commands": [
+          "vite build --config apps/warehouse-service/vite.config.mts --mode development --watch",
+          "node --watch --enable-source-maps dist/apps/warehouse-service/main.js"
+        ],
+        "parallel": true
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/warehouse-service/tsconfig.json"
+      }
+    },
+    "test-int": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest -c apps/warehouse-service/jest.int.config.js --runInBand --passWithNoTests"
+      }
+    }
+  }
+}
