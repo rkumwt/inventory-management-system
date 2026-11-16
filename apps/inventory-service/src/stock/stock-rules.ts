@@ -77,9 +77,77 @@ export function quantityAfterStockOut(
  */
 export function crossedLowStockThreshold(
   before: StockLevels,
-  quantityAfter: number,
+  after: StockLevels,
 ): boolean {
-  return (
-    !isLowStock(before) && isLowStock({ ...before, quantity: quantityAfter })
-  );
+  return !isLowStock(before) && isLowStock(after);
+}
+
+export interface StockLine {
+  productId: string;
+  quantity: number;
+}
+
+export interface Shortage {
+  productId: string;
+  requested: number;
+  available: number;
+}
+
+/** Adds up lines for the same product, so each product is checked once. */
+export function mergeLines(lines: StockLine[]): StockLine[] {
+  const totals = new Map<string, number>();
+  for (const line of lines) {
+    totals.set(
+      line.productId,
+      (totals.get(line.productId) ?? 0) + line.quantity,
+    );
+  }
+  return [...totals].map(([productId, quantity]) => ({ productId, quantity }));
+}
+
+/**
+ * Which lines of an order cannot be reserved in full. An order is reserved
+ * all-or-nothing, so any shortage means nothing is reserved. A product with
+ * no stock record in the warehouse has zero available.
+ */
+export function findShortages(
+  lines: StockLine[],
+  levelsByProduct: ReadonlyMap<
+    string,
+    Pick<StockLevels, 'quantity' | 'reservedQuantity'>
+  >,
+): Shortage[] {
+  return mergeLines(lines).flatMap((line) => {
+    const levels = levelsByProduct.get(line.productId);
+    const available = levels ? availableQuantity(levels) : 0;
+    return line.quantity > available
+      ? [{ productId: line.productId, requested: line.quantity, available }]
+      : [];
+  });
+}
+
+/** Reserved quantity after promising `amount` more units to an order. */
+export function reservedAfterReserve(
+  levels: StockLevels,
+  amount: number,
+): number {
+  assertWholePositive(amount);
+  const available = availableQuantity(levels);
+  if (amount > available) {
+    throw new StockRuleError(
+      'INSUFFICIENT_STOCK',
+      `Only ${available} available, ${amount} requested`,
+      { available, requested: amount },
+    );
+  }
+  return levels.reservedQuantity + amount;
+}
+
+/** Reserved quantity after giving `amount` units back. Never below zero. */
+export function reservedAfterRelease(
+  levels: StockLevels,
+  amount: number,
+): number {
+  assertWholePositive(amount);
+  return Math.max(0, levels.reservedQuantity - amount);
 }

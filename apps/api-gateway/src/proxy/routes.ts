@@ -1,5 +1,6 @@
 /** Downstream services the gateway can forward to. */
-export type UpstreamName = 'auth' | 'product' | 'warehouse' | 'inventory';
+export type UpstreamName =
+  'auth' | 'product' | 'warehouse' | 'inventory' | 'order' | 'notification';
 
 /**
  * Routing table: first path segment after `/v1` -> owning service.
@@ -13,6 +14,8 @@ export const ROUTES: Readonly<Record<string, UpstreamName>> = {
   // Includes storage locations: /warehouses/:id/locations
   warehouses: 'warehouse',
   inventory: 'inventory',
+  orders: 'order',
+  notifications: 'notification',
 };
 
 export const API_PREFIX = 'v1';

@@ -10,7 +10,7 @@ import prettier from 'eslint-config-prettier';
  *     config    (leaf)
  *     events    (leaf)
  *     common    -> config, events
- *     database  -> config, common
+ *     database  -> config, common, events
  */
 export default [
   ...nx.configs['flat/base'],
@@ -59,6 +59,7 @@ export default [
                 'lib:database',
                 'lib:config',
                 'lib:common',
+                'lib:events',
               ],
             },
           ],

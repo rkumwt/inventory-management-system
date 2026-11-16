@@ -14,6 +14,8 @@ const upstreamOptions: UpstreamOptions = {
     product: env.PRODUCT_SERVICE_URL,
     warehouse: env.WAREHOUSE_SERVICE_URL,
     inventory: env.INVENTORY_SERVICE_URL,
+    order: env.ORDER_SERVICE_URL,
+    notification: env.NOTIFICATION_SERVICE_URL,
   },
   timeoutMs: env.UPSTREAM_TIMEOUT_MS,
   retries: env.UPSTREAM_RETRIES,

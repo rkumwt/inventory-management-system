@@ -11,6 +11,8 @@ const client = new UpstreamClient({
     product: 'http://product.internal:4002',
     warehouse: 'http://warehouse.internal:4003',
     inventory: 'http://inventory.internal:4004',
+    order: 'http://order.internal:4005',
+    notification: 'http://notification.internal:4006',
   },
   timeoutMs: 1000,
   retries: 2,

@@ -17,6 +17,7 @@ export enum Permission {
   OrdersRead = 'orders:read',
   OrdersCreate = 'orders:create',
   OrdersCancel = 'orders:cancel',
+  NotificationsRead = 'notifications:read',
 }
 
 const allPermissions = Object.values(Permission);

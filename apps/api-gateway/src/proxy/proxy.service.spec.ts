@@ -35,6 +35,8 @@ describe('resolveRoute', () => {
     ['/v1/users?page=2', { upstream: 'auth', path: '/users?page=2' }],
     ['/v1/users/42/role', { upstream: 'auth', path: '/users/42/role' }],
     ['/v1/categories', { upstream: 'product', path: '/categories' }],
+    ['/v1/orders/7/cancel', { upstream: 'order', path: '/orders/7/cancel' }],
+    ['/v1/notifications', { upstream: 'notification', path: '/notifications' }],
     [
       '/v1/inventory/stock-in',
       { upstream: 'inventory', path: '/inventory/stock-in' },

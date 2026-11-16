@@ -11,3 +11,7 @@ export * from './lib/errors/error-response';
 export * from './lib/logger/logger';
 export * from './lib/pagination/pagination';
 export * from './lib/validation/query-boolean';
+export * from './lib/messaging/event-consumer';
+export * from './lib/messaging/event-publisher';
+export * from './lib/messaging/rmq';
+export * from './lib/http/fetch-with-retry';

@@ -22,14 +22,16 @@ rules; it protects and routes.
 
 Defined in `src/proxy/routes.ts`. The `/v1` prefix is stripped when forwarding.
 
-| Gateway path                                           | Forwarded to      | Auth                      |
-| ------------------------------------------------------ | ----------------- | ------------------------- |
-| `POST /v1/auth/login`, `register`, `refresh`, `logout` | auth-service      | public, strict rate limit |
-| `/v1/auth/*` (everything else, e.g. `GET /v1/auth/me`) | auth-service      | access token              |
-| `/v1/users/*`                                          | auth-service      | access token              |
-| `/v1/categories/*`, `/v1/products/*`                   | product-service   | access token              |
-| `/v1/warehouses/*` (including `.../locations`)         | warehouse-service | access token              |
-| `/v1/inventory/*`                                      | inventory-service | access token              |
+| Gateway path                                           | Forwarded to         | Auth                      |
+| ------------------------------------------------------ | -------------------- | ------------------------- |
+| `POST /v1/auth/login`, `register`, `refresh`, `logout` | auth-service         | public, strict rate limit |
+| `/v1/auth/*` (everything else, e.g. `GET /v1/auth/me`) | auth-service         | access token              |
+| `/v1/users/*`                                          | auth-service         | access token              |
+| `/v1/categories/*`, `/v1/products/*`                   | product-service      | access token              |
+| `/v1/warehouses/*` (including `.../locations`)         | warehouse-service    | access token              |
+| `/v1/inventory/*`                                      | inventory-service    | access token              |
+| `/v1/orders/*`                                         | order-service        | access token              |
+| `/v1/notifications/*`                                  | notification-service | access token              |
 
 Later phases add one line per new resource.
 
@@ -65,6 +67,8 @@ See `.env.example`. Shared values come from the root `.env`.
 | `PRODUCT_SERVICE_URL`       |         | Base URL of product-service      |
 | `WAREHOUSE_SERVICE_URL`     |         | Base URL of warehouse-service    |
 | `INVENTORY_SERVICE_URL`     |         | Base URL of inventory-service    |
+| `ORDER_SERVICE_URL`         |         | Base URL of order-service        |
+| `NOTIFICATION_SERVICE_URL`  |         | Base URL of notification-service |
 | `UPSTREAM_TIMEOUT_MS`       | 5000    | Timeout per downstream call      |
 | `UPSTREAM_RETRIES`          | 2       | Extra attempts for GET requests  |
 | `RATE_LIMIT_WINDOW_SECONDS` | 60      | Rate-limit window                |

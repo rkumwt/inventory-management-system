@@ -35,12 +35,20 @@ function contextFor(handler: keyof TestController, authorization?: string) {
   const context = {
     getHandler: () => TestController.prototype[handler],
     getClass: () => TestController,
+    getType: () => 'http',
     switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext;
   return { context, request };
 }
 
 describe('JwtAuthGuard', () => {
+  it('lets message handlers through: events carry no HTTP request', async () => {
+    const guard = new JwtAuthGuard(new Reflector(), {} as JwtService);
+    const context = { getType: () => 'rpc' } as unknown as ExecutionContext;
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
   it('attaches the user for a valid token', async () => {
     const token = await jwt.signAsync(claims, { expiresIn: 60 });
     const { context, request } = contextFor('secured', `Bearer ${token}`);

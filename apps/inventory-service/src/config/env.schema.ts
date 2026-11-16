@@ -4,6 +4,7 @@ import {
   databaseEnvSchema,
   httpEnvSchema,
   jwtVerifyEnvSchema,
+  rabbitmqEnvSchema,
   serviceUrl,
 } from '@ims/config';
 import { z } from 'zod';
@@ -13,6 +14,7 @@ export const inventoryEnvSchema = z.object({
   ...httpEnvSchema.shape,
   ...databaseEnvSchema.shape,
   ...jwtVerifyEnvSchema.shape,
+  ...rabbitmqEnvSchema.shape,
 
   // Synchronous lookups in the services that own products and warehouses
   PRODUCT_SERVICE_URL: serviceUrl,

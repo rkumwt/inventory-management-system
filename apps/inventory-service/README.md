@@ -36,8 +36,12 @@ Errors specific to this service:
 ## Data model
 
 - **`stock_items`**: one row per (product, warehouse) with `quantity` (on
-  hand), `reserved_quantity` (promised to orders; used from Phase 5),
-  `low_stock_threshold` and `version`.
+  hand), `reserved_quantity` (promised to orders), `low_stock_threshold` and
+  `version`.
+- **`stock_reservations`**: one row per order: what is held for it and
+  whether it still is (`RESERVED`, `REJECTED`, `RELEASED`).
+- **`outbox_events`**, **`processed_events`**: events waiting to be
+  published, and IDs of events already handled.
 - **`stock_movements`**: an append-only ledger. Every change to a stock level
   inserts a row (`IN`, `OUT`, `TRANSFER_IN`, `TRANSFER_OUT`) with the quantity
   moved, the level afterwards, who did it and an optional reference and note.
@@ -76,6 +80,30 @@ transaction, locking rows in a fixed order so opposite transfers cannot
 deadlock. An integration test fires 12 simultaneous stock-outs at 5 units and
 checks that the level and the ledger agree and nothing is oversold.
 
+## Events: its part in the order saga
+
+Queue `ims.inventory.events`. Handlers are in `src/reservations`.
+
+| Consumes         | Does                                              | Publishes                                   |
+| ---------------- | ------------------------------------------------- | ------------------------------------------- |
+| `OrderCreated`   | Reserves every line of the order, or none         | `StockReserved` or `StockReservationFailed` |
+| `OrderCancelled` | Gives the order's reservation back (compensation) | `StockReleased`                             |
+
+It also publishes `LowStockDetected` at the moment a stock-out, transfer or
+reservation takes an item's available quantity to or below its threshold
+(once per crossing, not on every later movement).
+
+Each handler runs in one transaction: record the event ID, change stock,
+save the reservation, write the reply to the outbox. Consequences:
+
+- **Duplicates are harmless.** A redelivered event finds its ID and is
+  skipped.
+- **Reservations use the same optimistic lock** as manual stock changes, so
+  orders and warehouse staff cannot oversell between them.
+- **Out-of-order delivery is handled.** If `OrderCancelled` arrives before
+  `OrderCreated`, a `RELEASED` marker is stored and the late `OrderCreated`
+  reserves nothing.
+
 ## Talking to other services
 
 The first time stock is recorded for a product in a warehouse, the service
@@ -89,14 +117,16 @@ After that first check, stock movements need no cross-service call.
 
 See `.env.example`. Shared values come from the root `.env`.
 
-| Variable                                       | Purpose                                       |
-| ---------------------------------------------- | --------------------------------------------- |
-| `PORT`, `DB_NAME`                              | Service port and database                     |
-| `JWT_ACCESS_SECRET`                            | Verifies access tokens issued by auth-service |
-| `PRODUCT_SERVICE_URL`, `WAREHOUSE_SERVICE_URL` | Where to check product and warehouse IDs      |
-| `UPSTREAM_TIMEOUT_MS`, `UPSTREAM_RETRIES`      | Timeout and extra attempts for those checks   |
-| `DB_MIGRATIONS_RUN`                            | Apply pending migrations at startup           |
-| `SEED_DATA`                                    | Insert opening stock levels at startup        |
+| Variable                                       | Purpose                                        |
+| ---------------------------------------------- | ---------------------------------------------- |
+| `PORT`, `DB_NAME`                              | Service port and database                      |
+| `JWT_ACCESS_SECRET`                            | Verifies access tokens issued by auth-service  |
+| `PRODUCT_SERVICE_URL`, `WAREHOUSE_SERVICE_URL` | Where to check product and warehouse IDs       |
+| `UPSTREAM_TIMEOUT_MS`, `UPSTREAM_RETRIES`      | Timeout and extra attempts for those checks    |
+| `RABBITMQ_URL`                                 | Broker for events                              |
+| `OUTBOX_POLL_INTERVAL_MS`                      | How often the outbox relay runs (default 1000) |
+| `DB_MIGRATIONS_RUN`                            | Apply pending migrations at startup            |
+| `SEED_DATA`                                    | Insert opening stock levels at startup         |
 
 ## Seed data
 
@@ -115,4 +145,6 @@ pnpm nx build inventory-service      # production bundle in dist/apps/inventory-
 ```
 
 Integration tests use their own database, `ims_inventory_test`, created on
-demand, and replace the calls to other services with a fake.
+demand, and replace the calls to other services with a fake. They need no
+RabbitMQ: events are handed to the handlers directly and replies are read
+from the outbox table.

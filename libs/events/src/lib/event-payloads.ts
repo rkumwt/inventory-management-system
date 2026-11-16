@@ -20,6 +20,8 @@ export interface OrderCreatedPayload {
   items: OrderLineItem[];
   totalAmount: number;
   createdBy: string;
+  /** Where notifications about this order are sent. */
+  createdByEmail: string;
 }
 
 /** Saga step 2 (success): inventory-service reserved every line. */
@@ -53,6 +55,8 @@ export interface OrderConfirmedPayload {
   orderNumber: string;
   totalAmount: number;
   createdBy: string;
+  /** Where notifications about this order are sent. */
+  createdByEmail: string;
 }
 
 export interface OrderCancelledPayload {
@@ -61,6 +65,8 @@ export interface OrderCancelledPayload {
   warehouseId: string;
   reason: string;
   createdBy: string;
+  /** Where notifications about this order are sent. */
+  createdByEmail: string;
 }
 
 export interface LowStockDetectedPayload {
