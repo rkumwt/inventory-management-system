@@ -36,6 +36,10 @@ describe('resolveRoute', () => {
     ['/v1/users/42/role', { upstream: 'auth', path: '/users/42/role' }],
     ['/v1/categories', { upstream: 'product', path: '/categories' }],
     [
+      '/v1/inventory/stock-in',
+      { upstream: 'inventory', path: '/inventory/stock-in' },
+    ],
+    [
       '/v1/products?search=drill',
       { upstream: 'product', path: '/products?search=drill' },
     ],

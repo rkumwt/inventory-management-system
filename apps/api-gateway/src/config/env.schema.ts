@@ -17,6 +17,7 @@ export const gatewayEnvSchema = z.object({
   AUTH_SERVICE_URL: serviceUrl,
   PRODUCT_SERVICE_URL: serviceUrl,
   WAREHOUSE_SERVICE_URL: serviceUrl,
+  INVENTORY_SERVICE_URL: serviceUrl,
 
   // Resilience for synchronous calls
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),

@@ -10,6 +10,7 @@ const client = new UpstreamClient({
     auth: 'http://auth.internal:4001',
     product: 'http://product.internal:4002',
     warehouse: 'http://warehouse.internal:4003',
+    inventory: 'http://inventory.internal:4004',
   },
   timeoutMs: 1000,
   retries: 2,
