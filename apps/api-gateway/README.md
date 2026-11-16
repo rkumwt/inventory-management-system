@@ -72,7 +72,7 @@ See `.env.example`. Shared values come from the root `.env`.
 | `UPSTREAM_TIMEOUT_MS`       | 5000    | Timeout per downstream call      |
 | `UPSTREAM_RETRIES`          | 2       | Extra attempts for GET requests  |
 | `RATE_LIMIT_WINDOW_SECONDS` | 60      | Rate-limit window                |
-| `RATE_LIMIT_MAX`            | 120     | Requests per window per IP       |
+| `RATE_LIMIT_MAX`            | 600     | Requests per window per IP       |
 | `AUTH_RATE_LIMIT_MAX`       | 10      | Limit for the public auth routes |
 
 ## Commands

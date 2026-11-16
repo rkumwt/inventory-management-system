@@ -45,7 +45,7 @@ export const serviceUrl = z
 
 export const httpEnvSchema = z.object({
   PORT: port,
-  CORS_ORIGINS: commaSeparatedList.default(['http://localhost:3000']),
+  CORS_ORIGINS: commaSeparatedList.default(['http://localhost:3001']),
 });
 
 export const databaseEnvSchema = z.object({
